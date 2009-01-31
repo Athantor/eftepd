@@ -219,6 +219,8 @@ public final class ClientConnection implements Runnable {
 			doAcctCmd(readLine);
 		} else if (readLine.toUpperCase().startsWith("CWD")) {
 			doCwdCmd(readLine);
+		} else if (readLine.toUpperCase().startsWith("CDUP")) {
+			doCdupCmd(readLine);
 		} else {
 			write.print("500 Waddya mean by '" + readLine + "'?\r\n");
 			write.flush();
@@ -229,6 +231,36 @@ public final class ClientConnection implements Runnable {
 							Lvl.NORMAL);
 			logsem.release();
 		}
+	}
+
+	/**
+	 * @param readLine
+	 */
+	private void doCdupCmd(String readLine) {
+		logsem.acquireUninterruptibly();
+		log.addCtlMsg(csock, "Got 'CDUP' command: " + readLine, Lvl.NORMAL);
+		logsem.release();
+
+		if (accnt == null) {
+			notLoggedInErrMsg(readLine);
+			return;
+		}
+
+		if (!chechIsCmdOk(readLine, 1)) {
+			return;
+		}
+
+		if (wdir == null) {
+			wdir = new File(accnt.getHomeDir().getAbsolutePath());
+		}
+
+		File tmp = wdir.getParentFile();
+		if (tmp == null) {
+			changeWDir(wdir);
+		} else {
+			changeWDir(tmp);
+		}
+
 	}
 
 	/**
@@ -435,7 +467,7 @@ public final class ClientConnection implements Runnable {
 
 				if (acc.getPass().compareTo(cmd[1]) == 0) {
 					accnt = acc;
-					wdir = new File(acc.getHomeDir().getAbsolutePath());
+					wdir = new File(accnt.getHomeDir().getAbsolutePath());
 
 					logsem.acquireUninterruptibly();
 					log.addCtlMsg(csock, "User '" + accnt.getUserName()
@@ -444,6 +476,9 @@ public final class ClientConnection implements Runnable {
 
 					write.print("230 O HAI, " + cmd[1] + "!");
 					write.flush();
+
+					System.out.println(wdir);
+					System.out.flush();
 
 				} else {
 					logsem.acquireUninterruptibly();
