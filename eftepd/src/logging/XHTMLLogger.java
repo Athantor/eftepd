@@ -393,8 +393,15 @@ public class XHTMLLogger implements Logger {
 		for (String s : cells) {
 			Element ttd = logdoc.createElement("td");
 			// ttd.setAttribute("id", "id-" + UUID.randomUUID().toString());
-			ttd.setTextContent(s.replaceAll("&", "&amp;").replaceAll("<",
-					"&lt;").replaceAll(">", "&gt").replaceAll("\"", "&quot;"));
+			ttd
+					.setTextContent(s
+							.replaceAll("&", "&amp;")
+							.replaceAll("<", "&lt;")
+							.replaceAll(">", "&gt")
+							.replaceAll("\"", "&quot;")
+							.replaceAll(
+									"[\\x01-\\x08\\x0B\\x0C\\x0E-\\x1F\\x75-\\x84\\x86-\\x9F]",
+									"\ufffd"));
 
 			tr.appendChild(ttd);
 		}
