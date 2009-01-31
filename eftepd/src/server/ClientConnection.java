@@ -246,7 +246,7 @@ public final class ClientConnection implements Runnable {
 			return;
 		}
 
-		if (!chechIsCmdOk(readLine, 1)) {
+		if (!chechAreCmdArgsCntOk(readLine, 0)) {
 			return;
 		}
 
@@ -277,7 +277,7 @@ public final class ClientConnection implements Runnable {
 			return;
 		}
 
-		if (!chechIsCmdOk(readLine, 2)) {
+		if (!chechAreCmdArgsCntOk(readLine, 1)) {
 			return;
 		}
 
@@ -330,21 +330,19 @@ public final class ClientConnection implements Runnable {
 	 * @param i
 	 * @return
 	 */
-	private boolean chechIsCmdOk(String readLine, Integer i) {
-		Integer len = readLine.split(" ", i).length;
-		Boolean res = (len >= i);
+	private boolean chechAreCmdArgsCntOk(String readLine, Integer i) {
+		Integer len = readLine.split(" ", i + 1).length;
+		Boolean res = (len == (i + 1));
 
 		if (!res) {
 
 			logsem.acquireUninterruptibly();
 			log.addCtlMsg(csock, "Got invalid args in command: " + readLine
-					+ String.format("(%s < %s)", len - 1, i - 1), Lvl.NORMAL);
+					+ String.format("(%s ≠ %s)", len, i + 1), Lvl.NORMAL);
 			logsem.release();
 
-			write
-					.print(String.format(
-							"501 EPIC FAIL in arguments (%s < %s)\r\n", i - 1,
-							len - 1));
+			write.print(String.format(
+					"501 EPIC FAIL in arguments (%s =/= %s)\r\n", len, i + 1));
 			write.flush();
 		}
 
@@ -442,7 +440,7 @@ public final class ClientConnection implements Runnable {
 			return;
 		}
 
-		if (!chechIsCmdOk(readLine, 2)) {
+		if (!chechAreCmdArgsCntOk(readLine, 1)) {
 			logsem.acquireUninterruptibly();
 			log
 					.addCtlMsg(csock, "Malformed PASS line: " + readLine,
@@ -538,7 +536,7 @@ public final class ClientConnection implements Runnable {
 
 			String[] cmd = readLine.split(" ", 2);
 
-			if (!chechIsCmdOk(readLine, 2)) {
+			if (!chechAreCmdArgsCntOk(readLine, 1)) {
 				logsem.acquireUninterruptibly();
 				log.addCtlMsg(csock, "Malformed line: " + readLine, Lvl.NORMAL);
 				logsem.release();
