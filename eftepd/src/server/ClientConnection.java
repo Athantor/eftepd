@@ -281,6 +281,10 @@ public final class ClientConnection implements Runnable {
 			return;
 		}
 
+		if (wdir == null) {
+			wdir = new File(accnt.getHomeDir().getAbsolutePath());
+		}
+
 		String[] cmd = readLine.split(" ", 2);
 
 		File ttmp = new File(cmd[1]);
@@ -313,8 +317,8 @@ public final class ClientConnection implements Runnable {
 					Lvl.NORMAL);
 			logsem.release();
 
-			write.print("250 Yay! I'm now at: " + tmp.getAbsolutePath()
-					+ "! I kinda like it here.\r\n");
+			write.print("250 Yay! I'm now at: \"" + tmp.getAbsolutePath()
+					+ "\"! I kinda like it here.\r\n");
 			wdir = tmp;
 		}
 
@@ -467,7 +471,7 @@ public final class ClientConnection implements Runnable {
 
 				if (acc.getPass().compareTo(cmd[1]) == 0) {
 					accnt = acc;
-					wdir = new File(accnt.getHomeDir().getAbsolutePath());
+					wdir = accnt.getHomeDir().getAbsoluteFile();
 
 					logsem.acquireUninterruptibly();
 					log.addCtlMsg(csock, "User '" + accnt.getUserName()
@@ -476,9 +480,6 @@ public final class ClientConnection implements Runnable {
 
 					write.print("230 O HAI, " + cmd[1] + "!");
 					write.flush();
-
-					System.out.println(wdir);
-					System.out.flush();
 
 				} else {
 					logsem.acquireUninterruptibly();
