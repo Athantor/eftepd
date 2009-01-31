@@ -260,6 +260,14 @@ public final class ClientConnection implements Runnable {
 			tmp = new File(wdir, cmd[1]);
 		}
 
+		changeWDir(tmp);
+
+	}
+
+	/**
+	 * @param tmp
+	 */
+	private void changeWDir(File tmp) {
 		if (!tmp.exists()) {
 			write.print("550 Can't go to non-existent place, sorx.\r\n");
 		} else if (!tmp.isDirectory()) {
@@ -267,13 +275,18 @@ public final class ClientConnection implements Runnable {
 		} else if (!(tmp.canRead() && tmp.canExecute())) {
 			write.print("550 I'm not allowed to go there.\r\n");
 		} else {
+
+			logsem.acquireUninterruptibly();
+			log.addCtlMsg(csock, "Changed WD: " + tmp.getAbsolutePath(),
+					Lvl.NORMAL);
+			logsem.release();
+
 			write.print("250 Yay! I'm now at: " + tmp.getAbsolutePath()
-					+ "! I like it here.\r\n");
+					+ "! I kinda like it here.\r\n");
 			wdir = tmp;
 		}
 
 		write.flush();
-
 	}
 
 	/**
