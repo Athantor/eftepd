@@ -44,7 +44,7 @@ import settings.SettingsManager;
  */
 public final class ClientConnection implements Runnable {
 
-	private Socket csock;
+	private Socket csock, dsock = null;
 	private Logger log;
 	private Boolean kill = false;
 	private BufferedReader read;
@@ -141,6 +141,7 @@ public final class ClientConnection implements Runnable {
 			while (!kill && ((cmdline = read.readLine()) != null)) {
 				parseCommand(cmdline);
 			}
+
 		} catch (SocketTimeoutException e) {
 
 			logsem.acquireUninterruptibly();
@@ -160,7 +161,9 @@ public final class ClientConnection implements Runnable {
 				logsem.release();
 			}
 
-			return;
+			if (dsock == null) {
+				return;
+			}
 
 		} catch (IOException e) {
 			logsem.acquireUninterruptibly();
@@ -168,7 +171,9 @@ public final class ClientConnection implements Runnable {
 					+ e.getLocalizedMessage(), Lvl.NOTICE);
 			logsem.release();
 
-			return;
+			if (dsock == null) {
+				return;
+			}
 
 		}
 
@@ -176,7 +181,20 @@ public final class ClientConnection implements Runnable {
 		log.addConnectionMsg(csock, "disconnect", Lvl.NORMAL);
 		logsem.release();
 
-		return;
+		try {
+			csock.close();
+		} catch (IOException e) {
+			logsem.acquireUninterruptibly();
+			log.addConnectionMsg(csock, "disconnect failed: "
+					+ e.getLocalizedMessage(), Lvl.ERROR);
+			logsem.release();
+
+			csock = null;
+		}
+
+		if (dsock == null) {
+			return;
+		}
 
 	}
 
@@ -194,6 +212,8 @@ public final class ClientConnection implements Runnable {
 			doPassCmd(readLine);
 		} else if (readLine.toUpperCase().startsWith("NOOP")) {
 			doNoopCmd(readLine);
+		} else if (readLine.toUpperCase().startsWith("QUIT")) {
+			doQuitCmd(readLine);
 		} else {
 			write.print("500 Waddya mean by '" + readLine + "'?\r\n");
 			write.flush();
@@ -202,6 +222,21 @@ public final class ClientConnection implements Runnable {
 			log.addCtlMsg(csock, "Got uknown command: " + readLine, Lvl.NORMAL);
 			logsem.release();
 		}
+	}
+
+	/**
+	 * @param readLine
+	 */
+	private void doQuitCmd(String readLine) {
+
+		logsem.acquireUninterruptibly();
+		log.addCtlMsg(csock, "Got QUIT; quitting", Lvl.NORMAL);
+		logsem.release();
+
+		write.print("221 KTHXBYE!\r\n");
+		write.flush();
+
+		killIt();
 	}
 
 	/**
