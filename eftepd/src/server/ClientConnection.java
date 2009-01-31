@@ -50,6 +50,7 @@ public final class ClientConnection implements Runnable {
 	private BufferedReader read;
 	private PrintWriter write;
 	private SettingsManager smngr;
+	private File wdir = null;
 
 	private String uname = null, pass = null;
 	private Account accnt = null;
@@ -216,6 +217,8 @@ public final class ClientConnection implements Runnable {
 			doQuitCmd(readLine);
 		} else if (readLine.toUpperCase().startsWith("ACCT")) {
 			doAcctCmd(readLine);
+		} else if (readLine.toUpperCase().startsWith("CWD")) {
+			doCwdCmd(readLine);
 		} else {
 			write.print("500 Waddya mean by '" + readLine + "'?\r\n");
 			write.flush();
@@ -226,6 +229,77 @@ public final class ClientConnection implements Runnable {
 							Lvl.NORMAL);
 			logsem.release();
 		}
+	}
+
+	/**
+	 * @param readLine
+	 */
+	private void doCwdCmd(String readLine) {
+
+		logsem.acquireUninterruptibly();
+		log.addCtlMsg(csock, "Got 'CWD' command: " + readLine, Lvl.NORMAL);
+		logsem.release();
+
+		if (accnt == null) {
+			notLoggedInErrMsg(readLine);
+			return;
+		}
+
+		if (!chechIsCmdOk(readLine, 2)) {
+			return;
+		}
+
+		String[] cmd = readLine.split(" ", 2);
+
+		File ttmp = new File(cmd[1]);
+		File tmp;
+
+		if (ttmp.isAbsolute()) {
+			tmp = ttmp;
+		} else {
+			tmp = new File(wdir, cmd[1]);
+		}
+
+		if (!tmp.exists()) {
+			write.print("550 Can't go to non-existent place, sorx.\r\n");
+		} else if (!tmp.isDirectory()) {
+			write.print("550 Don't know how to enter - it's not a dir.\r\n");
+		} else if (!(tmp.canRead() && tmp.canExecute())) {
+			write.print("550 I'm not allowed to go there.\r\n");
+		} else {
+			write.print("250 Yay! I'm now at: " + tmp.getAbsolutePath()
+					+ "! I like it here.\r\n");
+			wdir = tmp;
+		}
+
+		write.flush();
+
+	}
+
+	/**
+	 * @param readLine
+	 * @param i
+	 * @return
+	 */
+	private boolean chechIsCmdOk(String readLine, Integer i) {
+		Integer len = readLine.split(" ", i).length;
+		Boolean res = (len >= i);
+
+		if (!res) {
+
+			logsem.acquireUninterruptibly();
+			log.addCtlMsg(csock, "Got invalid args in command: " + readLine
+					+ String.format("(%s < %s)", len - 1, i - 1), Lvl.NORMAL);
+			logsem.release();
+
+			write
+					.print(String.format(
+							"501 EPIC FAIL in arguments (%s < %s)\r\n", i - 1,
+							len - 1));
+			write.flush();
+		}
+
+		return res;
 	}
 
 	/**
@@ -242,7 +316,6 @@ public final class ClientConnection implements Runnable {
 		} else {
 			notImplementedMsg(readLine);
 		}
-
 	}
 
 	/**
@@ -320,20 +393,17 @@ public final class ClientConnection implements Runnable {
 			return;
 		}
 
-		String[] cmd = readLine.split(" ", 2);
-
-		if (cmd.length != 2) {
+		if (!chechIsCmdOk(readLine, 2)) {
 			logsem.acquireUninterruptibly();
 			log
 					.addCtlMsg(csock, "Malformed PASS line: " + readLine,
 							Lvl.NORMAL);
 			logsem.release();
 
-			write.print("501 I don't undersand '" + readLine + "'!\r\n");
-			write.flush();
-
 			return;
 		}
+
+		String[] cmd = readLine.split(" ", 2);
 
 		if (uname != null) {
 			if (accnt != null) {
@@ -347,10 +417,12 @@ public final class ClientConnection implements Runnable {
 
 				pass = cmd[1];
 			} else {
+
 				Account acc = smngr.getAccountsSett().getUserAccount(uname);
 
 				if (acc.getPass().compareTo(cmd[1]) == 0) {
 					accnt = acc;
+					wdir = new File(acc.getHomeDir().getAbsolutePath());
 
 					logsem.acquireUninterruptibly();
 					log.addCtlMsg(csock, "User '" + accnt.getUserName()
@@ -417,13 +489,10 @@ public final class ClientConnection implements Runnable {
 
 			String[] cmd = readLine.split(" ", 2);
 
-			if (cmd.length != 2) {
+			if (!chechIsCmdOk(readLine, 2)) {
 				logsem.acquireUninterruptibly();
 				log.addCtlMsg(csock, "Malformed line: " + readLine, Lvl.NORMAL);
 				logsem.release();
-
-				write.print("501 I don't undersand '" + readLine + "'!\r\n");
-				write.flush();
 
 				return;
 			}
