@@ -214,14 +214,66 @@ public final class ClientConnection implements Runnable {
 			doNoopCmd(readLine);
 		} else if (readLine.toUpperCase().startsWith("QUIT")) {
 			doQuitCmd(readLine);
+		} else if (readLine.toUpperCase().startsWith("ACCT")) {
+			doAcctCmd(readLine);
 		} else {
 			write.print("500 Waddya mean by '" + readLine + "'?\r\n");
 			write.flush();
 
 			logsem.acquireUninterruptibly();
-			log.addCtlMsg(csock, "Got uknown command: " + readLine, Lvl.NORMAL);
+			log
+					.addCtlMsg(csock, "Got unknown command: " + readLine,
+							Lvl.NORMAL);
 			logsem.release();
 		}
+	}
+
+	/**
+	 * @param readLine
+	 */
+	private void doAcctCmd(String readLine) {
+
+		logsem.acquireUninterruptibly();
+		log.addCtlMsg(csock, "Got 'ACCT' command: " + readLine, Lvl.NORMAL);
+		logsem.release();
+
+		if (accnt == null) {
+			notLoggedInErrMsg(readLine);
+		} else {
+			notImplementedMsg(readLine);
+		}
+
+	}
+
+	/**
+	 * @param readLine
+	 */
+	private void notLoggedInErrMsg(String readLine) {
+		if (accnt == null) {
+			write
+					.print("530 I don't talk with strangers. Tell me who you are first!\r\n");
+			write.flush();
+		}
+	}
+
+	/**
+	 * 
+	 */
+	private void notImplementedMsg(String rl) {
+
+		String[] cmd = rl.split(" ", 2);
+		String c;
+
+		if (cmd.length != 2) {
+			c = cmd[0];
+		} else {
+			c = rl;
+		}
+
+		write.print("502 I head about '" + c
+				+ "' but I don't know how to do that (not implemented)\r\n");
+		write.flush();
+
 	}
 
 	/**
