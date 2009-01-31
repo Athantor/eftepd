@@ -147,8 +147,8 @@ public final class ClientConnection implements Runnable {
 			log.addConnectionMsg(csock, "connection timeout", Lvl.NOTICE);
 			logsem.release();
 
-			write.println("421 Goodbye sleepyhead! (timeout; "
-					+ (idlemstime / 1000) + "s)");
+			write.print("421 Goodbye sleepyhead! (timeout; "
+					+ (idlemstime / 1000) + "s)\r\n");
 			write.flush();
 
 			try {
@@ -195,7 +195,7 @@ public final class ClientConnection implements Runnable {
 		} else if (readLine.toUpperCase().startsWith("NOOP")) {
 			doNoopCmd(readLine);
 		} else {
-			write.println("500 Waddya mean by '" + readLine + "'?");
+			write.print("500 Waddya mean by '" + readLine + "'?\r\n");
 			write.flush();
 
 			logsem.acquireUninterruptibly();
@@ -208,7 +208,7 @@ public final class ClientConnection implements Runnable {
 	 * @param readLine
 	 */
 	private void doNoopCmd(String readLine) {
-		write.println("200 Yay, you're not dead! I'm good too, BTW.");
+		write.print("200 Yay, you're not dead! I'm good too, BTW.\r\n");
 		write.flush();
 
 		logsem.acquireUninterruptibly();
@@ -227,7 +227,7 @@ public final class ClientConnection implements Runnable {
 			log.addCtlMsg(csock, "Got PASS before USER : " + uname, Lvl.NOTICE);
 			logsem.release();
 
-			write.println("503 PASS? But I don't know who you are yet!");
+			write.print("503 PASS? But I don't know who you are yet!\r\n");
 			write.flush();
 
 			return;
@@ -242,7 +242,7 @@ public final class ClientConnection implements Runnable {
 							Lvl.NORMAL);
 			logsem.release();
 
-			write.println("501 I don't undersand '" + readLine + "'!");
+			write.print("501 I don't undersand '" + readLine + "'!\r\n");
 			write.flush();
 
 			return;
@@ -255,7 +255,7 @@ public final class ClientConnection implements Runnable {
 				logsem.release();
 
 				write
-						.println("230 I already know who you are - no need to prove it");
+						.print("230 I already know who you are - no need to prove it\r\n");
 				write.flush();
 
 				pass = cmd[1];
@@ -270,7 +270,7 @@ public final class ClientConnection implements Runnable {
 							+ "' logged in.", Lvl.NOTICE);
 					logsem.release();
 
-					write.println("230 O HAI, " + cmd[1] + "!");
+					write.print("230 O HAI, " + cmd[1] + "!");
 					write.flush();
 
 				} else {
@@ -301,8 +301,8 @@ public final class ClientConnection implements Runnable {
 					} catch (InterruptedException e) {
 					}
 
-					write.println("421 You've tried to fool me! You're not "
-							+ uname + "! (invalid pass)");
+					write.print("421 You've tried to fool me! You're not "
+							+ uname + "! (invalid pass)\r\n");
 					write.flush();
 
 					return;
@@ -322,8 +322,8 @@ public final class ClientConnection implements Runnable {
 					Lvl.NORMAL);
 			logsem.release();
 
-			write.println("530 I know you already! You won't fool me '"
-					+ accnt.getUserName() + "'!");
+			write.print("530 I know you already! You won't fool me '"
+					+ accnt.getUserName() + "'!\r\n");
 			write.flush();
 
 		} else {
@@ -335,7 +335,7 @@ public final class ClientConnection implements Runnable {
 				log.addCtlMsg(csock, "Malformed line: " + readLine, Lvl.NORMAL);
 				logsem.release();
 
-				write.println("501 I don't undersand '" + readLine + "'!");
+				write.print("501 I don't undersand '" + readLine + "'!\r\n");
 				write.flush();
 
 				return;
@@ -347,7 +347,7 @@ public final class ClientConnection implements Runnable {
 				logsem.release();
 
 				write
-						.println("421 I don't talk with stangers! I don't know you!");
+						.print("421 I don't talk with stangers! I don't know you!\r\n");
 				write.flush();
 
 				return;
@@ -362,7 +362,7 @@ public final class ClientConnection implements Runnable {
 				logsem.release();
 
 				write
-						.println("421 I know you, but I dont like you. (account disabled)");
+						.print("421 I know you, but I dont like you. (account disabled)\r\n");
 				write.flush();
 
 				return;
@@ -376,9 +376,8 @@ public final class ClientConnection implements Runnable {
 				log.addCtlMsg(csock, "Got USER: " + readLine, Lvl.NORMAL);
 				logsem.release();
 
-				write
-						.println("331 Is it really you, " + cmd[1]
-								+ "? Prove it!");
+				write.print("331 Is it really you, " + cmd[1]
+						+ "? Prove it!\r\n");
 				write.flush();
 
 			} else {
@@ -390,7 +389,7 @@ public final class ClientConnection implements Runnable {
 						+ "' logged in.", Lvl.NOTICE);
 				logsem.release();
 
-				write.println("230 O HAI, " + accnt.getUserName() + "!");
+				write.print("230 O HAI, " + accnt.getUserName() + "!\r\n");
 				write.flush();
 
 			}
@@ -414,7 +413,7 @@ public final class ClientConnection implements Runnable {
 			hm = "";
 		}
 
-		write.println(String.format("220-%s ver. %s @ %s%s", smngr
+		write.print(String.format("220-%s ver. %s @ %s%s\r\n", smngr
 				.getServerSett().getProperty("SERVERNAME"), smngr
 				.getServerSett().getProperty("SERVERVERSION"), csock
 				.getLocalAddress().getHostName(), hm));
@@ -434,7 +433,7 @@ public final class ClientConnection implements Runnable {
 					String ln;
 
 					while ((ln = br.readLine()) != null) {
-						write.println("220-" + ln);
+						write.print("220-" + ln + "\r\n");
 					}
 
 				} else {
@@ -454,7 +453,7 @@ public final class ClientConnection implements Runnable {
 
 		}
 
-		write.println("220 Please login NAO");
+		write.print("220 Please login NAO!\r\n");
 		write.flush();
 
 	}
