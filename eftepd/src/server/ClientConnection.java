@@ -299,6 +299,11 @@ public final class ClientConnection implements Runnable {
 		log.addCtlMsg(csock, "Got 'TYPE' cmd:" + readLine, Lvl.NORMAL);
 		logsem.release();
 
+		if (accnt == null) {
+			notLoggedInErrMsg(readLine);
+			return;
+		}
+
 		write.print("200 MODE is always STREAM\r\n");
 		write.flush();
 
