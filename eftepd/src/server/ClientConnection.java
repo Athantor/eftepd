@@ -59,12 +59,17 @@ public final class ClientConnection implements Runnable {
 	private PrintWriter write;
 	private SettingsManager smngr;
 	private File wdir = null;
+	private Type currt;
 
 	private String uname = null, pass = null;
 	private Account accnt = null;
 
 	private Integer idlemstime = 900000;
 	private Long st_transf = 0L, st_conns = 0L;
+
+	private enum Type {
+		ASCII, IMAGE
+	};
 
 	Semaphore logsem;
 
@@ -143,6 +148,7 @@ public final class ClientConnection implements Runnable {
 			return;
 		}
 
+		currt = Type.ASCII;
 		printHelloMsg();
 
 		String cmdline = "";
@@ -245,6 +251,8 @@ public final class ClientConnection implements Runnable {
 			doEpsvCmd(readLine);
 		} else if (readLine.toUpperCase().startsWith("PWD")) {
 			doPwdCmd(readLine);
+		} else if (readLine.toUpperCase().startsWith("TYPE")) {
+			doTypeCmd(readLine);
 		} else {
 			write.print("500 Waddya mean by '" + readLine + "'?\r\n");
 			write.flush();
@@ -255,6 +263,52 @@ public final class ClientConnection implements Runnable {
 							Lvl.NORMAL);
 			logsem.release();
 		}
+	}
+
+	/**
+	 * @param readLine
+	 */
+	private void doTypeCmd(String readLine) {
+		logsem.acquireUninterruptibly();
+		log.addCtlMsg(csock, "Got 'TYPE' cmd:" + readLine, Lvl.NORMAL);
+		logsem.release();
+
+		if (accnt == null) {
+			notLoggedInErrMsg(readLine);
+			return;
+		}
+
+		String[] cmd = readLine.split(" ", 3);
+
+		if (cmd.length == 1) {
+			write.print("501 You forgot tell me which type to set\r\n");
+			write.flush();
+		} else {
+			String mod;
+			if (cmd.length == 2) {
+				mod = "";
+			} else {
+				mod = "; option is always 'N'";
+			}
+
+			if (cmd[1].equalsIgnoreCase("A")) {
+				currt = Type.ASCII;
+				write.print("200 Set type ASCII" + mod + "\r\n");
+			} else if (cmd[1].equalsIgnoreCase("I")) {
+				currt = Type.IMAGE;
+				write.print("200 Set type IMAGE/BINARY" + mod + "\r\n");
+			} else if (cmd[1].equalsIgnoreCase("E")
+					|| cmd[1].equalsIgnoreCase("L")) {
+				write.print("504 Representatyion type '" + cmd[1]
+						+ "' not supported\r\n");
+			} else {
+				write.print("501 Representation type '" + cmd[1]
+						+ "' is invalid\r\n");
+			}
+		}
+
+		write.flush();
+
 	}
 
 	/**
