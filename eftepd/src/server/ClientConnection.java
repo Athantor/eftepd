@@ -1080,7 +1080,7 @@ public final class ClientConnection implements Runnable {
 				write.flush();
 			} else {
 				write.print("150 Listing '" + t
-						+ "; options not supported'\r\n");
+						+ "'; options not supported'\r\n");
 				write.flush();
 
 				ret = makeCrappyLs(t);
@@ -1214,8 +1214,8 @@ public final class ClientConnection implements Runnable {
 		}
 
 		ret.add(String.format(Locale.ENGLISH,
-				"%-9s 0 unknown unknown %12d %tb %5s %-32s",
-				makeFileRights(thetgt), thetgt.length(), d, hr, fn));
+				"%-10s 0 unknown unknown %12d %tb %td %5s %-32s",
+				makeFileRights(thetgt), thetgt.length(), d, d, hr, fn));
 
 		return ret;
 	}
