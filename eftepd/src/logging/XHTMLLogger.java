@@ -352,7 +352,10 @@ public class XHTMLLogger implements Logger {
 			System.err.println("**> Can't reread log: "
 					+ e.getLocalizedMessage());
 		}
-		// TODO Auto-generated method stub
+		
+		addMsg(xfrel, l, new Date().toString(), csock.getInetAddress()
+				.getHostName(), csock.getInetAddress().getHostAddress(), String
+				.valueOf(csock.getPort()), msg);
 
 	}
 

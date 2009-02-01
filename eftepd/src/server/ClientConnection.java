@@ -25,6 +25,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -267,6 +268,8 @@ public final class ClientConnection implements Runnable {
 			doPortCmd(readLine);
 		} else if (readLine.toUpperCase().startsWith("RETR")) {
 			doRetrCmd(readLine);
+		} else if (readLine.toUpperCase().startsWith("STOR")) {
+			doStorCmd(readLine);
 		} else {
 			write.print("500 Waddya mean by '" + readLine + "'?\r\n");
 			write.flush();
@@ -277,6 +280,206 @@ public final class ClientConnection implements Runnable {
 							Lvl.NORMAL);
 			logsem.release();
 		}
+	}
+
+	private void doStorCmd(String readLine) {
+		logsem.acquireUninterruptibly();
+		log.addCtlMsg(csock, "Got 'STOR' cmd:" + readLine, Lvl.NORMAL);
+		logsem.release();
+
+		if (accnt == null) {
+			notLoggedInErrMsg(readLine);
+			return;
+		}
+
+		if (!chechAreCmdArgsCntOk(readLine, 1)) {
+			return;
+		}
+
+		if (wdir == null) {
+			wdir = new File(accnt.getHomeDir().getAbsolutePath());
+		}
+
+		String[] cmd = readLine.split(" ", 2);
+		File f = new File(cmd[1]);
+
+		if (!f.isAbsolute()) {
+			f = new File(wdir, cmd[1]);
+		}
+		if (!f.exists()) {
+			try {
+				f.createNewFile();
+			} catch (IOException e) {
+				write.print("450 Can't create new file: " + e.getMessage()
+						+ "'\r\n");
+				write.flush();
+				return;
+			}
+		}
+
+		if (!f.canWrite()) {
+			write.print("450 Can't access file: " + f.getAbsolutePath()
+					+ "'\r\n");
+			write.flush();
+			return;
+		} else {
+			write.print("150 Give it to me baby!\r\n");
+			write.flush();
+		}
+
+		Socket s = getDataSocket();
+
+		if (s == null) {
+			write.print("425 Can't open socket\r\n");
+			write.flush();
+			return;
+		}
+
+		Long start = System.currentTimeMillis();
+
+		final Integer WRBLKSIZE = 1024;
+
+		FileOutputStream fos;
+		try {
+			fos = new FileOutputStream(f, false);
+		} catch (FileNotFoundException e2) {
+			try {
+				s.close();
+			} catch (IOException e) {
+
+			}
+
+			write.print("450 Can't read socket: " + e2.getMessage() + "'\r\n");
+			write.flush();
+			return;
+		}
+		;
+		byte[] buf = new byte[WRBLKSIZE];
+
+		Integer ctr = 0;
+		Long totctr = 0L;
+		Long quota = -1L;
+
+		if (wdir.getAbsolutePath().compareTo(f.getParent()) == 0) {
+			
+			quota = accnt.getQuota();
+
+			if (quota == -1) {
+				if (smngr.getServerSett().hasProperty("UserQuota")) {
+					try {
+						quota = Long.parseLong(smngr.getServerSett()
+								.getProperty("UserQuota"));
+					} catch (Exception e) {
+						quota = -1L;
+					}
+				}
+			}
+		}
+
+		Long totdirsize = getTotDirSize(f);
+
+		/*
+		 * !!!!!!!!
+		 */
+		do {
+
+			buf = new byte[WRBLKSIZE];
+			try {
+				ctr = s.getInputStream().read(buf);
+			} catch (IOException e) {
+				try {
+					s.close();
+				} catch (IOException e1) {
+
+				}
+
+				write.print("450 Can't read socket: " + e.getMessage()
+						+ "'\r\n");
+				write.flush();
+				return;
+			}
+
+			if (ctr > 0) {
+				try {
+					if (currt == Type.ASCII) {
+						buf = new String(buf, 0, ctr).replaceAll("\r\n",
+								System.getProperty("line.separator"))
+								.getBytes();
+						ctr = buf.length;
+					}
+
+					if (quota > -1) {
+						
+						if ((totdirsize + ctr) >= quota) {
+	
+							write.print("552 Quota exceeded: "
+									+ (totdirsize + ctr) + " >= " + quota);
+							write.flush();
+
+							s.close();
+							
+							logsem.acquireUninterruptibly();
+							log.addXfrMsg(csock, "Quota exceeded for " + f.getAbsolutePath() + ": " + totdirsize + " >= " + quota, Lvl.NORMAL);
+							logsem.release();
+							
+							return;
+						} else {
+							totdirsize += ctr;
+						}
+					}
+
+					fos.write(buf, 0, ctr);
+
+					totctr += ctr;
+
+				} catch (IOException e) {
+					try {
+						s.close();
+					} catch (IOException e1) {
+
+					}
+
+					write.print("450 Can't write to file: " + e.getMessage()
+							+ "'\r\n");
+					write.flush();
+					return;
+				}
+			}
+		} while ((ctr != -1));
+
+		try {
+			s.close();
+		} catch (IOException e) {
+
+		}
+
+		Double ts = (System.currentTimeMillis() - start) / 1000.0;
+		logsem.acquireUninterruptibly();
+		log.addXfrMsg(csock, String.format(
+				"Got from you file %s in %.2f s with %.2f KB/s ", f
+						.getAbsolutePath(), ts, (totctr / 1024.0) / ts),
+				Lvl.NORMAL);
+		logsem.release();
+
+		write.print(String.format(
+				"226 Uploaded file %s in %.2f s with %.2f KB/s\r\n", f
+						.getAbsolutePath(), ts, (totctr / 1024.0) / ts));
+		write.flush();
+
+	}
+
+	private Long getTotDirSize(File f) {
+		if (f.getParentFile() == null) {
+			return -1L;
+		}
+
+		Long size = 0L;
+
+		for (File file : f.getParentFile().listFiles()) {
+			size += file.length();
+		}
+
+		return size;
 	}
 
 	/**
@@ -379,6 +582,8 @@ public final class ClientConnection implements Runnable {
 				ctr += buf.length;
 			}
 
+			s.close();
+
 			Double ts = (System.currentTimeMillis() - start) / 1000.0;
 			logsem.acquireUninterruptibly();
 			log.addXfrMsg(csock, String.format(
@@ -466,8 +671,6 @@ public final class ClientConnection implements Runnable {
 	 * @param readLine
 	 */
 	private void doStruCmd(String readLine) {
-		// TODO Auto-generated method stub
-
 		logsem.acquireUninterruptibly();
 		log.addCtlMsg(csock, "Got 'STRU' cmd:" + readLine, Lvl.NORMAL);
 		logsem.release();
