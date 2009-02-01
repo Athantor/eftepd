@@ -255,6 +255,8 @@ public final class ClientConnection implements Runnable {
 			doTypeCmd(readLine);
 		} else if (readLine.toUpperCase().startsWith("SYST")) {
 			doSystCmd(readLine);
+		} else if (readLine.toUpperCase().startsWith("MODE")) {
+			doModeCmd(readLine);
 		} else {
 			write.print("500 Waddya mean by '" + readLine + "'?\r\n");
 			write.flush();
@@ -270,10 +272,27 @@ public final class ClientConnection implements Runnable {
 	/**
 	 * @param readLine
 	 */
+	private void doModeCmd(String readLine) {
+		logsem.acquireUninterruptibly();
+		log.addCtlMsg(csock, "Got 'TYPE' cmd:" + readLine, Lvl.NORMAL);
+		logsem.release();
+
+		write.print("200 MODE is always STREAM\r\n");
+		write.flush();
+
+	}
+
+	/**
+	 * @param readLine
+	 */
 	private void doSystCmd(String readLine) {
 		/*
 		 * if (accnt == null) { notLoggedInErrMsg(readLine); return; }
 		 */
+
+		logsem.acquireUninterruptibly();
+		log.addCtlMsg(csock, "Got 'SYST' cmd:" + readLine, Lvl.NORMAL);
+		logsem.release();
 
 		if (!chechAreCmdArgsCntOk(readLine, 0)) {
 			return;
@@ -281,7 +300,6 @@ public final class ClientConnection implements Runnable {
 		write.print("215 UNIX type: L8 (" + System.getProperty("os.name")
 				+ "; " + System.getProperty("java.vendor") + " Java)\r\n");
 		write.flush();
-
 	}
 
 	/**
