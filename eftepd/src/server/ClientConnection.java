@@ -23,6 +23,8 @@ package server;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -263,7 +265,8 @@ public final class ClientConnection implements Runnable {
 			doStruCmd(readLine);
 		} else if (readLine.toUpperCase().startsWith("PORT")) {
 			doPortCmd(readLine);
-
+		} else if (readLine.toUpperCase().startsWith("RETR")) {
+			doRetrCmd(readLine);
 		} else {
 			write.print("500 Waddya mean by '" + readLine + "'?\r\n");
 			write.flush();
@@ -274,6 +277,127 @@ public final class ClientConnection implements Runnable {
 							Lvl.NORMAL);
 			logsem.release();
 		}
+	}
+
+	/**
+	 * @param readLine
+	 */
+	private void doRetrCmd(String readLine) {
+		logsem.acquireUninterruptibly();
+		log.addCtlMsg(csock, "Got 'STRU' cmd:" + readLine, Lvl.NORMAL);
+		logsem.release();
+
+		if (accnt == null) {
+			notLoggedInErrMsg(readLine);
+			return;
+		}
+
+		if (!chechAreCmdArgsCntOk(readLine, 1)) {
+			return;
+		}
+
+		if (wdir == null) {
+			wdir = new File(accnt.getHomeDir().getAbsolutePath());
+		}
+
+		String[] cmd = readLine.split(" ", 2);
+		File f = new File(cmd[1]);
+
+		if (!f.isAbsolute()) {
+			f = new File(wdir, cmd[1]);
+		}
+
+		if (!f.exists() || !f.canRead()) {
+			write.print("450 Can't access file: " + f.getAbsolutePath()
+					+ "'\r\n");
+			write.flush();
+			return;
+		} else {
+			write.print("150 Get ready for " + f.length() + "bytes!\r\n");
+			write.flush();
+		}
+
+		Socket s = getDataSocket();
+
+		if (s == null) {
+			write.print("425 Can't open socket\r\n");
+			write.flush();
+			return;
+		}
+
+		Long start = System.currentTimeMillis();
+
+		final Integer RDBLKSIZE = 1024;
+		FileInputStream fis;
+		try {
+			fis = new FileInputStream(f);
+		} catch (FileNotFoundException e) {
+			write.print("550 Can't read file:" + e.getMessage() + "\r\n");
+			write.flush();
+			return;
+		}
+
+		byte[] buf = new byte[RDBLKSIZE];
+		Long ctr = 0L;
+
+		try {
+			while ((fis.available() >= RDBLKSIZE) && ((fis.read(buf)) != -1)) {
+
+				if (currt == Type.ASCII) {
+					if (!System.getProperty("line.separator").equalsIgnoreCase(
+							"\r\n")) {
+						buf = new String(buf, 0, RDBLKSIZE).replaceAll(
+								System.getProperty("line.separator"), "\r\n")
+								.getBytes();
+					}
+
+				}
+
+				s.getOutputStream().write(buf);
+
+				ctr += RDBLKSIZE;
+
+				buf = new byte[RDBLKSIZE];
+
+			}
+
+			if ((fis.available() > 0)) {
+				buf = new byte[fis.available()];
+				fis.read(buf);
+
+				if (currt == Type.ASCII) {
+					if (!System.getProperty("line.separator").equalsIgnoreCase(
+							"\r\n")) {
+						buf = new String(buf).replaceAll(
+								System.getProperty("line.separator"), "\r\n")
+								.getBytes();
+					}
+
+				}
+
+				s.getOutputStream().write(buf);
+				ctr += buf.length;
+			}
+
+			Double ts = (System.currentTimeMillis() - start) / 1000.0;
+			logsem.acquireUninterruptibly();
+			log.addXfrMsg(csock, String.format(
+					"Uploaded file %s in %.2f s with %.2f KB/s ", f
+							.getAbsolutePath(), ts, (ctr / 1024.0) / ts),
+					Lvl.NORMAL);
+			logsem.release();
+
+			write.print(String.format(
+					"226 Uploaded file %s in %.2f s with %.2f KB/s\r\n", f
+							.getAbsolutePath(), ts, (ctr / 1024.0) / ts));
+			write.flush();
+
+		} catch (Exception e) {
+			write.print("451 Can't send file:" + e.getMessage() + "\r\n");
+			write.flush();
+			return;
+		}
+
 	}
 
 	/**
