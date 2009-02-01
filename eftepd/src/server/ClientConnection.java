@@ -369,7 +369,7 @@ public final class ClientConnection implements Runnable {
 	 */
 	private InetSocketAddress makeDataSocket(String readLine) {
 
-		dsc = new DataSocketCreator(smngr);
+		dsc = new DataSocketCreator(smngr, log);
 
 		InetSocketAddress isa = null;
 
