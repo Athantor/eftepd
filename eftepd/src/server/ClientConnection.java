@@ -253,6 +253,8 @@ public final class ClientConnection implements Runnable {
 			doPwdCmd(readLine);
 		} else if (readLine.toUpperCase().startsWith("TYPE")) {
 			doTypeCmd(readLine);
+		} else if (readLine.toUpperCase().startsWith("SYST")) {
+			doSystCmd(readLine);
 		} else {
 			write.print("500 Waddya mean by '" + readLine + "'?\r\n");
 			write.flush();
@@ -263,6 +265,23 @@ public final class ClientConnection implements Runnable {
 							Lvl.NORMAL);
 			logsem.release();
 		}
+	}
+
+	/**
+	 * @param readLine
+	 */
+	private void doSystCmd(String readLine) {
+		/*
+		 * if (accnt == null) { notLoggedInErrMsg(readLine); return; }
+		 */
+
+		if (!chechAreCmdArgsCntOk(readLine, 0)) {
+			return;
+		}
+		write.print("215 UNIX type: L8 (" + System.getProperty("os.name")
+				+ "; " + System.getProperty("java.vendor") + " Java)\r\n");
+		write.flush();
+
 	}
 
 	/**
