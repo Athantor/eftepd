@@ -28,6 +28,8 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.net.Inet6Address;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
@@ -45,6 +47,7 @@ import settings.SettingsManager;
 public final class ClientConnection implements Runnable {
 
 	private Socket csock, dsock = null;
+	private DataSocketCreator dsc;
 	private Logger log;
 	private Boolean kill = false;
 	private BufferedReader read;
@@ -221,6 +224,10 @@ public final class ClientConnection implements Runnable {
 			doCwdCmd(readLine);
 		} else if (readLine.toUpperCase().startsWith("CDUP")) {
 			doCdupCmd(readLine);
+		} else if (readLine.toUpperCase().startsWith("LIST")) {
+			doListCmd(readLine);
+		} else if (readLine.toUpperCase().startsWith("PASV")) {
+			doPasvCmd(readLine);
 		} else {
 			write.print("500 Waddya mean by '" + readLine + "'?\r\n");
 			write.flush();
@@ -236,9 +243,90 @@ public final class ClientConnection implements Runnable {
 	/**
 	 * @param readLine
 	 */
+	private void doPasvCmd(String readLine) {
+
+		logsem.acquireUninterruptibly();
+		log.addCtlMsg(csock, "Got 'PASV' command", Lvl.NORMAL);
+		logsem.release();
+
+		if (accnt == null) {
+			notLoggedInErrMsg(readLine);
+			return;
+		}
+
+		String addr = makePasvAddr(makeDataSocket(readLine));
+
+		if (addr.charAt(0) != '(') {
+
+			logsem.acquireUninterruptibly();
+			log.addCtlMsg(csock, "Failed to bind PASV ssock: " + addr,
+					Lvl.ERROR);
+			logsem.release();
+
+			write.print("425 " + addr + "\r\n");
+		} else {
+
+			logsem.acquireUninterruptibly();
+			log.addCtlMsg(csock, "Bound PASV sock: " + addr, Lvl.NORMAL);
+			logsem.release();
+
+			write.print("227 Entering Passive Mode " + addr + "\r\n");
+		}
+
+		write.flush();
+
+	}
+
+	private String makePasvAddr(InetSocketAddress isa) {
+
+		if (isa.getAddress() instanceof Inet6Address) {
+			return "IPv6 in PASV not supported";
+		}
+
+		int port = isa.getPort();
+		int p1 = port / 256;
+
+		return "(" + isa.getAddress().getHostAddress().replace('.', ',') + ","
+				+ p1 + "," + (port - (p1 * 256)) + ")";
+
+	}
+
+	/**
+	 * @param readLine
+	 */
+	private InetSocketAddress makeDataSocket(String readLine) {
+
+		dsc = new DataSocketCreator(smngr);
+
+		InetSocketAddress isa = null;
+
+		try {
+			isa = dsc.prepare();
+			dsc.start();
+		} catch (Exception e) {
+			logsem.acquireUninterruptibly();
+			log.addMiscMsg(null, "Failed to make data ssocket: "
+					+ e.getLocalizedMessage(), Lvl.NORMAL);
+			logsem.release();
+		}
+
+		return isa;
+
+	}
+
+	/**
+	 * @param readLine
+	 */
+	private void doListCmd(String readLine) {
+		notImplementedMsg(readLine);
+	}
+
+	/**
+	 * @param readLine
+	 */
 	private void doCdupCmd(String readLine) {
 		logsem.acquireUninterruptibly();
-		log.addCtlMsg(csock, "Got 'CDUP' command: " + readLine, Lvl.NORMAL);
+		log.addCtlMsg(csock, "Got 'CDUP' command", Lvl.NORMAL);
 		logsem.release();
 
 		if (accnt == null) {
@@ -338,7 +426,7 @@ public final class ClientConnection implements Runnable {
 
 			logsem.acquireUninterruptibly();
 			log.addCtlMsg(csock, "Got invalid args in command: " + readLine
-					+ String.format("(%s ≠ %s)", len, i + 1), Lvl.NORMAL);
+					+ String.format(" (%s ≠ %s)", len, i + 1), Lvl.NORMAL);
 			logsem.release();
 
 			write.print(String.format(
