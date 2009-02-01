@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -179,6 +180,17 @@ public final class ClientConnection implements Runnable {
 				return;
 			}
 
+		} catch (Exception e) {
+			write
+					.print("451-OMG, I suck! Internal server error! Blargh! I AM DEAD!X_X\r\n451 "
+							+ e.getMessage() + "\r\n");
+			write.flush();
+			try {
+				csock.close();
+			} catch (IOException e1) {
+			}
+
+			return;
 		}
 
 		logsem.acquireUninterruptibly();
@@ -228,6 +240,8 @@ public final class ClientConnection implements Runnable {
 			doListCmd(readLine);
 		} else if (readLine.toUpperCase().startsWith("PASV")) {
 			doPasvCmd(readLine);
+		} else if (readLine.toUpperCase().startsWith("EPSV")) {
+			doEpsvCmd(readLine);
 		} else {
 			write.print("500 Waddya mean by '" + readLine + "'?\r\n");
 			write.flush();
@@ -238,6 +252,65 @@ public final class ClientConnection implements Runnable {
 							Lvl.NORMAL);
 			logsem.release();
 		}
+	}
+
+	/**
+	 * @param readLine
+	 */
+	private void doEpsvCmd(String readLine) {
+		logsem.acquireUninterruptibly();
+		log.addCtlMsg(csock, "Got 'EPSV' command: " + readLine, Lvl.NORMAL);
+		logsem.release();
+
+		if (accnt == null) {
+			notLoggedInErrMsg(readLine);
+			return;
+		}
+
+		String[] cmd = readLine.split(" ", 2);
+
+		InetSocketAddress isa = makeDataSocket(readLine);
+
+		if (cmd.length == 2) {
+
+			if (cmd[1].equalsIgnoreCase("ALL")) {
+				write.print("504 ALL for EPSV not implemented\r\n");
+			} else if (cmd[1].equalsIgnoreCase("1")
+					&& !(isa.getAddress() instanceof Inet4Address)) {
+				write.print("522 Network protocol not supported, use (2)\r\n");
+			} else if (cmd[1].equalsIgnoreCase("2")
+					&& !(isa.getAddress() instanceof Inet6Address)) {
+				write.print("522 Network protocol not supported, use (1)\r\n");
+			} else if (cmd[1].equalsIgnoreCase("1")
+					|| cmd[1].equalsIgnoreCase("2")) {
+
+				logsem.acquireUninterruptibly();
+				log.addCtlMsg(csock,
+						"Went into EPSV on port: " + isa.getPort(), Lvl.NORMAL);
+				logsem.release();
+
+				write.print("229 Entering Extended Passive Mode (|||"
+						+ isa.getPort() + "|)\r\n");
+			} else {
+				write
+						.print("501 Authors of RFC2428 would be sad becase of you using invalid parameters\r\n");
+			}
+		} else if (cmd.length == 1) {
+
+			logsem.acquireUninterruptibly();
+			log.addCtlMsg(csock, "Went into EPSV on port: " + isa.getPort(),
+					Lvl.NORMAL);
+			logsem.release();
+
+			write.print("229 Entering Extended Passive Mode (|||"
+					+ isa.getPort() + "|)\r\n");
+		} else {
+			write
+					.print("501 Authors of RFC2428 would be sad becase of you using invalid parameters\r\n");
+		}
+
+		write.flush();
+
 	}
 
 	/**
@@ -595,7 +668,7 @@ public final class ClientConnection implements Runnable {
 					} catch (InterruptedException e) {
 					}
 
-					write.print("421 You've tried to fool me! You're not "
+					write.print("530 You've tried to fool me! You're not "
 							+ uname + "! (invalid pass)\r\n");
 					write.flush();
 
@@ -638,7 +711,7 @@ public final class ClientConnection implements Runnable {
 				logsem.release();
 
 				write
-						.print("421 I don't talk with stangers! I don't know you!\r\n");
+						.print("530 I don't talk with stangers! I don't know you!\r\n");
 				write.flush();
 
 				return;
@@ -653,7 +726,7 @@ public final class ClientConnection implements Runnable {
 				logsem.release();
 
 				write
-						.print("421 I know you, but I dont like you. (account disabled)\r\n");
+						.print("530 I know you, but I dont like you. (account disabled)\r\n");
 				write.flush();
 
 				return;
