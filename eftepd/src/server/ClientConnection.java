@@ -243,6 +243,8 @@ public final class ClientConnection implements Runnable {
 			doPasvCmd(readLine);
 		} else if (readLine.toUpperCase().startsWith("EPSV")) {
 			doEpsvCmd(readLine);
+		} else if (readLine.toUpperCase().startsWith("PWD")) {
+			doPwdCmd(readLine);
 		} else {
 			write.print("500 Waddya mean by '" + readLine + "'?\r\n");
 			write.flush();
@@ -253,6 +255,33 @@ public final class ClientConnection implements Runnable {
 							Lvl.NORMAL);
 			logsem.release();
 		}
+	}
+
+	/**
+	 * @param readLine
+	 */
+	private void doPwdCmd(String readLine) {
+		logsem.acquireUninterruptibly();
+		log.addCtlMsg(csock, "Got 'PWD' cmd", Lvl.NORMAL);
+		logsem.release();
+
+		if (accnt == null) {
+			notLoggedInErrMsg(readLine);
+			return;
+		}
+
+		if (!chechAreCmdArgsCntOk(readLine, 0)) {
+			return;
+		}
+
+		if (wdir == null) {
+			wdir = new File(accnt.getHomeDir().getAbsolutePath());
+		}
+
+		write.print("257 \"" + wdir.getAbsolutePath().replaceAll("\"", "\"\"")
+				+ "\" <- you are here\r\n");
+		write.flush();
+
 	}
 
 	private Socket getDataSocket() {
