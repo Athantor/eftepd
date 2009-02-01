@@ -486,7 +486,7 @@ public final class ClientConnection implements Runnable {
 
 		String[] cmd = readLine.split(" ", 2);
 
-		InetSocketAddress isa = makeDataSocket(readLine);
+		InetSocketAddress isa = makePassiveDataSocket(readLine);
 
 		if (cmd.length == 2) {
 
@@ -544,7 +544,7 @@ public final class ClientConnection implements Runnable {
 			return;
 		}
 
-		String addr = makePasvAddr(makeDataSocket(readLine));
+		String addr = makePasvAddr(makePassiveDataSocket(readLine));
 
 		if (addr.charAt(0) != '(') {
 
@@ -584,7 +584,7 @@ public final class ClientConnection implements Runnable {
 	/**
 	 * @param readLine
 	 */
-	private InetSocketAddress makeDataSocket(String readLine) {
+	private InetSocketAddress makePassiveDataSocket(String readLine) {
 
 		dsc = new DataSocketCreator(smngr, log);
 
