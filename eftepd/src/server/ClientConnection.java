@@ -30,6 +30,7 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
@@ -60,6 +61,7 @@ public final class ClientConnection implements Runnable {
 	private SettingsManager smngr;
 	private File wdir = null;
 	private Type currt;
+	private InetSocketAddress port_addr;
 
 	private String uname = null, pass = null;
 	private Account accnt = null;
@@ -259,6 +261,9 @@ public final class ClientConnection implements Runnable {
 			doModeCmd(readLine);
 		} else if (readLine.toUpperCase().startsWith("STRU")) {
 			doStruCmd(readLine);
+		} else if (readLine.toUpperCase().startsWith("PORT")) {
+			doPortCmd(readLine);
+
 		} else {
 			write.print("500 Waddya mean by '" + readLine + "'?\r\n");
 			write.flush();
@@ -269,6 +274,68 @@ public final class ClientConnection implements Runnable {
 							Lvl.NORMAL);
 			logsem.release();
 		}
+	}
+
+	/**
+	 * @param readLine
+	 */
+	private void doPortCmd(String readLine) {
+		logsem.acquireUninterruptibly();
+		log.addCtlMsg(csock, "Got 'STRU' cmd:" + readLine, Lvl.NORMAL);
+		logsem.release();
+
+		if (accnt == null) {
+			notLoggedInErrMsg(readLine);
+			return;
+		}
+
+		if (!chechAreCmdArgsCntOk(readLine, 1)) {
+			return;
+		}
+
+		String[] cmd = readLine.split(" ", 2);
+		String[] addr = cmd[1].split(",");
+
+		if (addr.length != 6) {
+			write.print("501 Invalid format of PORT address\r\n");
+			write.flush();
+			return;
+		}
+
+		String ip = String.format("%s.%s.%s.%s", addr[0], addr[1], addr[2],
+				addr[3]);
+
+		int port = 20;
+
+		try {
+			port = (Integer.parseInt(addr[4]) * 256)
+					+ Integer.parseInt(addr[5]);
+		} catch (NumberFormatException e) {
+			write.print("501 Invalid format of PORT address: " + e.getMessage()
+					+ "\r\n");
+			write.flush();
+			return;
+		}
+
+		try {
+			if (InetAddress.getByName(ip) instanceof Inet6Address) {
+				write
+						.print("501 Invalid format of PORT address: IPv6 in PORT not supported\r\n");
+				write.flush();
+			} else {
+				port_addr = new InetSocketAddress(InetAddress.getByName(ip),
+						port);
+
+				write.print("200 PORT OK\r\n");
+				write.flush();
+
+			}
+		} catch (Exception e) {
+			write.print("501 Invalid format of PORT address: " + e.getMessage()
+					+ "\r\n");
+			write.flush();
+		}
+
 	}
 
 	/**
@@ -441,6 +508,33 @@ public final class ClientConnection implements Runnable {
 
 				dsc = null;
 
+				return null;
+			}
+		} else if (port_addr != null) {
+			try {
+				Socket s = new Socket(port_addr.getHostName(), port_addr
+						.getPort());
+
+				logsem.acquireUninterruptibly();
+				log.addCtlMsg(csock, "Made succesful active connection @ "
+						+ port_addr, Lvl.NORMAL);
+				logsem.release();
+
+				port_addr = null;
+				st_conns++;
+				return s;
+
+			} catch (Exception e) {
+				logsem.acquireUninterruptibly();
+				log.addCtlMsg(csock,
+						"Failed to make  succesful active connection @ "
+								+ port_addr, Lvl.NORMAL);
+				logsem.release();
+
+				write.print("425 PORT FAIL: " + e.getMessage() + "\r\n");
+				write.flush();
+
+				port_addr = null;
 				return null;
 			}
 		} else {
@@ -685,6 +779,17 @@ public final class ClientConnection implements Runnable {
 						write.print("426 Connection b0rked: " + e1.getMessage()
 								+ "\r\n");
 						write.flush();
+
+						try {
+							s.close();
+						} catch (IOException e) {
+							logsem.acquireUninterruptibly();
+							log.addMiscMsg(null, "Can't close socket: "
+									+ e.getLocalizedMessage(), Lvl.ERROR);
+							logsem.release();
+						}
+
+						return;
 					}
 				}
 
