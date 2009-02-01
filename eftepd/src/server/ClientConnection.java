@@ -583,7 +583,7 @@ public final class ClientConnection implements Runnable {
 			return;
 		}
 
-		String[] cmd = readLine.split(" ", 2);
+		String[] cmd = readLine.split(" ");
 		ArrayList<String> ret;
 
 		if (cmd.length == 1) {
@@ -602,7 +602,7 @@ public final class ClientConnection implements Runnable {
 
 			String t = null;
 			for (String cc : cmd) {
-				if (cc.equalsIgnoreCase("LIST") || cc.startsWith("-")) {
+				if (!cc.equalsIgnoreCase("LIST") && !cc.startsWith("-")) {
 					t = cc;
 					break;
 				}
