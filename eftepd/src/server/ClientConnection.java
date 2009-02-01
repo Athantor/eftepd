@@ -34,6 +34,9 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.Locale;
 import java.util.concurrent.Semaphore;
 
 import logging.Logger;
@@ -61,6 +64,7 @@ public final class ClientConnection implements Runnable {
 	private Account accnt = null;
 
 	private Integer idlemstime = 900000;
+	private Long st_transf = 0L, st_conns = 0L;
 
 	Semaphore logsem;
 
@@ -251,7 +255,7 @@ public final class ClientConnection implements Runnable {
 		}
 	}
 
-	private Socket makeDataSocket() {
+	private Socket getDataSocket() {
 		if (dsc != null) {
 			if (dsc.getStatus() == Status.FINISHED) {
 				Socket s = dsc.getDataSocket();
@@ -262,6 +266,7 @@ public final class ClientConnection implements Runnable {
 
 				dsc = null;
 
+				st_conns++;
 				return s;
 			} else if (dsc.getStatus() == Status.WAITNIG) {
 				while (dsc.getStatus() == Status.WAITNIG) {
@@ -270,8 +275,8 @@ public final class ClientConnection implements Runnable {
 					} catch (InterruptedException e) {
 					}
 				}
-
-				return makeDataSocket();
+				st_conns++;
+				return getDataSocket();
 
 			} else if (dsc.getStatus() == Status.ERROR) {
 				write.print("425 Can't open passive data connection: "
@@ -456,7 +461,250 @@ public final class ClientConnection implements Runnable {
 	 * @param readLine
 	 */
 	private void doListCmd(String readLine) {
-		//
+
+		logsem.acquireUninterruptibly();
+		log.addCtlMsg(csock, "Got 'LIST' cmd: " + readLine, Lvl.NORMAL);
+		logsem.release();
+
+		if (accnt == null) {
+			notLoggedInErrMsg(readLine);
+			return;
+		}
+
+		if (wdir == null) {
+			wdir = new File(accnt.getHomeDir().getAbsolutePath());
+		}
+
+		Socket s = getDataSocket();
+
+		if (s == null) {
+			return;
+		}
+
+		String[] cmd = readLine.split(" ", 2);
+		ArrayList<String> ret;
+
+		if (cmd.length == 1) {
+			write.print("150 Listing '.'\r\n");
+			write.flush();
+
+			ret = makeCrappyLs(".");
+
+		} else if (cmd.length == 2) {
+			write.print("150 Listing '" + cmd[1] + "'\r\n");
+			write.flush();
+
+			ret = makeCrappyLs(cmd[1]);
+
+		} else {
+
+			String t = null;
+			for (String cc : cmd) {
+				if (cc.equalsIgnoreCase("LIST") || cc.startsWith("-")) {
+					t = cc;
+					break;
+				}
+			}
+
+			if (t == null) {
+				ret = makeCrappyLs(".");
+				write.print("150 Listing '.'; options not supported\r\n");
+				write.flush();
+			} else {
+				write.print("150 Listing '" + t
+						+ "; options not supported'\r\n");
+				write.flush();
+
+				ret = makeCrappyLs(t);
+			}
+
+		}
+
+		if (ret != null) {
+			try {
+				OutputStreamWriter osw = new OutputStreamWriter(s
+						.getOutputStream());
+
+				for (String ls : ret) {
+					try {
+						osw.write(ls + "\r\n");
+						st_transf += (ls + "\r\n").length();
+					} catch (IOException e1) {
+						logsem.acquireUninterruptibly();
+						log.addMiscMsg(null, "Can't write to socket: "
+								+ e1.getLocalizedMessage(), Lvl.ERROR);
+						logsem.release();
+
+						write.print("426 Connection b0rked: " + e1.getMessage()
+								+ "\r\n");
+						write.flush();
+					}
+				}
+
+				osw.flush();
+				osw.close();
+
+				try {
+					s.close();
+				} catch (IOException e) {
+					logsem.acquireUninterruptibly();
+					log.addMiscMsg(null, "Can't close socket: "
+							+ e.getLocalizedMessage(), Lvl.ERROR);
+					logsem.release();
+				}
+
+				write.print("226 Listing done\r\n");
+				write.flush();
+
+			} catch (IOException e) {
+
+				logsem.acquireUninterruptibly();
+				log.addMiscMsg(null, "Can't open socket: "
+						+ e.getLocalizedMessage(), Lvl.ERROR);
+				logsem.release();
+
+				write.print("425 Can't do data connection: " + e.getMessage()
+						+ "\r\n");
+				write.flush();
+			}
+		}
+
+		try {
+			s.close();
+		} catch (IOException e) {
+			logsem.acquireUninterruptibly();
+			log.addMiscMsg(null, "Can't close socket: "
+					+ e.getLocalizedMessage(), Lvl.ERROR);
+			logsem.release();
+		}
+
+	}
+
+	/**
+	 * @param readLine
+	 */
+	private ArrayList<String> makeCrappyLs(String pth) {
+		File thetgt = new File(pth);
+
+		if (pth.equalsIgnoreCase("..")) {
+			thetgt = wdir.getParentFile();
+		} else if (pth.equalsIgnoreCase(".")) {
+			thetgt = wdir.getAbsoluteFile();
+		} else if (!thetgt.isAbsolute()) {
+			thetgt = new File(wdir, pth);
+		}
+
+		if (!thetgt.exists()) {
+			write.print("550 Object @ '" + pth + "' doesn't exist\r\n");
+			write.flush();
+
+			return null;
+		}
+
+		if (thetgt.isDirectory()) {
+			return makeDirLs(thetgt);
+		} else {
+			return makeNotDirLs(thetgt, false);
+		}
+	}
+
+	/**
+	 * @param thetgt
+	 * @return
+	 */
+	@SuppressWarnings("deprecation")
+	private ArrayList<String> makeNotDirLs(File thetgt, Boolean cnt) {
+		ArrayList<String> ret = new ArrayList<String>();
+
+		Date d = new Date(thetgt.lastModified());
+		String hr;
+
+		if (d.getYear() != (new Date()).getYear()) {
+			hr = String.valueOf(1900 + d.getYear());
+		} else {
+
+			hr = String.format(Locale.ENGLISH, "%tR", d);
+		}
+
+		String fn;
+
+		if (!cnt) {
+			fn = thetgt.getAbsolutePath();
+		} else {
+			fn = thetgt.getName();
+		}
+
+		ret.add(String.format(Locale.ENGLISH,
+				"%-9s 0 unknown unknown %12d %tb %5s %-32s",
+				makeFileRights(thetgt), thetgt.length(), d, hr, fn));
+
+		return ret;
+	}
+
+	/**
+	 * @param thetgt
+	 * @return
+	 */
+	private String makeFileRights(File thetgt) {
+		String rgt = "";
+
+		if (thetgt.isDirectory()) {
+			rgt += "d";
+		} else {
+			rgt += "-";
+		}
+
+		if (thetgt.canRead()) {
+			rgt += "r";
+		} else {
+			rgt += "-";
+		}
+
+		if (thetgt.canWrite()) {
+			rgt += "w";
+		} else {
+			rgt += "-";
+		}
+
+		if (thetgt.canExecute()) {
+			rgt += "x";
+		} else {
+			rgt += "-";
+		}
+
+		rgt += "------";
+
+		return rgt;
+	}
+
+	/**
+	 * @param thetgt
+	 * @return
+	 */
+	private ArrayList<String> makeDirLs(File thetgt) {
+
+		ArrayList<String> ret = new ArrayList<String>();
+
+		try {
+			for (File s : thetgt.listFiles()) {
+				ret.addAll(makeNotDirLs(s, true));
+			}
+		} catch (Exception e) {
+
+			logsem.acquireUninterruptibly();
+			log.addMiscMsg(null, "Can't list dir '" + thetgt.getAbsolutePath()
+					+ "': " + e.getLocalizedMessage(), Lvl.NOTICE);
+			logsem.release();
+
+			write.print("550 Cat list dir @ '" + thetgt.getAbsolutePath()
+					+ "': " + e.getMessage() + "\r\n");
+			write.flush();
+
+			return null;
+		}
+
+		return ret;
+
 	}
 
 	/**
@@ -631,7 +879,8 @@ public final class ClientConnection implements Runnable {
 		log.addCtlMsg(csock, "Got QUIT; quitting", Lvl.NORMAL);
 		logsem.release();
 
-		write.print("221 KTHXBYE!\r\n");
+		write.print("221 KTHXBYE! (xfrd " + st_transf + "B in " + st_conns
+				+ " data conns)\r\n");
 		write.flush();
 
 		killIt();
