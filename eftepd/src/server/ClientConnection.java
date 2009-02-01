@@ -793,7 +793,10 @@ public final class ClientConnection implements Runnable {
 		File ttmp = new File(cmd[1]);
 		File tmp;
 
-		if (ttmp.isAbsolute()) {
+		if (cmd[1].equalsIgnoreCase("..")) {
+			tmp = wdir.getParentFile();
+			tmp = tmp == null ? wdir.getAbsoluteFile() : tmp;
+		} else if (ttmp.isAbsolute()) {
 			tmp = ttmp;
 		} else {
 			tmp = new File(wdir, cmd[1]);
