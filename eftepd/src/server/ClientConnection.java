@@ -257,6 +257,8 @@ public final class ClientConnection implements Runnable {
 			doSystCmd(readLine);
 		} else if (readLine.toUpperCase().startsWith("MODE")) {
 			doModeCmd(readLine);
+		} else if (readLine.toUpperCase().startsWith("STRU")) {
+			doStruCmd(readLine);
 		} else {
 			write.print("500 Waddya mean by '" + readLine + "'?\r\n");
 			write.flush();
@@ -267,6 +269,26 @@ public final class ClientConnection implements Runnable {
 							Lvl.NORMAL);
 			logsem.release();
 		}
+	}
+
+	/**
+	 * @param readLine
+	 */
+	private void doStruCmd(String readLine) {
+		// TODO Auto-generated method stub
+
+		logsem.acquireUninterruptibly();
+		log.addCtlMsg(csock, "Got 'STRU' cmd:" + readLine, Lvl.NORMAL);
+		logsem.release();
+
+		if (accnt == null) {
+			notLoggedInErrMsg(readLine);
+			return;
+		}
+
+		write.print("200 STRUCTURE is always FILE\r\n");
+		write.flush();
+
 	}
 
 	/**
