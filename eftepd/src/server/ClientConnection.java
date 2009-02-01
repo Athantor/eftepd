@@ -38,6 +38,7 @@ import java.util.concurrent.Semaphore;
 
 import logging.Logger;
 import logging.Logger.Lvl;
+import server.DataSocketCreator.Status;
 import settings.Account;
 import settings.SettingsManager;
 
@@ -180,18 +181,14 @@ public final class ClientConnection implements Runnable {
 				return;
 			}
 
-		} catch (Exception e) {
-			write
-					.print("451-OMG, I suck! Internal server error! Blargh! I AM DEAD!X_X\r\n451 "
-							+ e.getMessage() + "\r\n");
-			write.flush();
-			try {
-				csock.close();
-			} catch (IOException e1) {
-			}
-
-			return;
-		}
+		} /*
+		 * catch (Exception e) { write.print(
+		 * "451-OMG, I suck! Internal server error! Blargh! I AM DEAD!X_X\r\n451 "
+		 * + e.getMessage() + "\r\n"); write.flush(); try { csock.close(); }
+		 * catch (IOException e1) { }
+		 * 
+		 * return; }
+		 */
 
 		logsem.acquireUninterruptibly();
 		log.addConnectionMsg(csock, "disconnect", Lvl.NORMAL);
@@ -252,6 +249,74 @@ public final class ClientConnection implements Runnable {
 							Lvl.NORMAL);
 			logsem.release();
 		}
+	}
+
+	private Socket makeDataSocket() {
+		if (dsc != null) {
+			if (dsc.getStatus() == Status.FINISHED) {
+				Socket s = dsc.getDataSocket();
+				try {
+					dsc.join(250);
+				} catch (InterruptedException e) {
+				}
+
+				dsc = null;
+
+				return s;
+			} else if (dsc.getStatus() == Status.WAITNIG) {
+				while (dsc.getStatus() == Status.WAITNIG) {
+					try {
+						Thread.sleep(500);
+					} catch (InterruptedException e) {
+					}
+				}
+
+				return makeDataSocket();
+
+			} else if (dsc.getStatus() == Status.ERROR) {
+				write.print("425 Can't open passive data connection: "
+						+ dsc.getExc().getMessage() + "\r\n");
+				write.flush();
+
+				dsc = null;
+
+				return null;
+
+			} else {
+				write
+						.print("425 Can't open passive data connection: there is noone on the other side\r\n");
+				write.flush();
+
+				dsc = null;
+
+				return null;
+			}
+		} else {
+			try {
+				Socket s = new Socket(csock.getInetAddress(), 20);
+
+				logsem.acquireUninterruptibly();
+				log.addCtlMsg(csock,
+						"Made succesful active connection @ p. 20", Lvl.NORMAL);
+				logsem.release();
+
+				return s;
+			} catch (IOException e) {
+
+				logsem.acquireUninterruptibly();
+				log.addCtlMsg(csock,
+						"Failed to make succesful active connection @ p. 20",
+						Lvl.WARNING);
+				logsem.release();
+
+				write.print("425 Can't open active def data connection: "
+						+ e.getMessage() + "\r\n");
+				write.flush();
+
+				return null;
+			}
+		}
+
 	}
 
 	/**
@@ -391,7 +456,7 @@ public final class ClientConnection implements Runnable {
 	 * @param readLine
 	 */
 	private void doListCmd(String readLine) {
-		notImplementedMsg(readLine);
+		//
 	}
 
 	/**
