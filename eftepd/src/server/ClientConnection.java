@@ -1214,7 +1214,7 @@ public final class ClientConnection implements Runnable {
 		}
 
 		ret.add(String.format(Locale.ENGLISH,
-				"%-10s 0 unknown unknown %12d %tb %td %5s %-32s",
+				"%-10s 0 unknown unknown %12d %tb %td %5s %s",
 				makeFileRights(thetgt), thetgt.length(), d, d, hr, fn));
 
 		return ret;
