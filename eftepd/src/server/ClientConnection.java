@@ -361,7 +361,7 @@ public final class ClientConnection implements Runnable {
 		Long quota = -1L;
 
 		if (wdir.getAbsolutePath().compareTo(f.getParent()) == 0) {
-			
+
 			quota = accnt.getQuota();
 
 			if (quota == -1) {
@@ -409,19 +409,21 @@ public final class ClientConnection implements Runnable {
 					}
 
 					if (quota > -1) {
-						
+
 						if ((totdirsize + ctr) >= quota) {
-	
+
 							write.print("552 Quota exceeded: "
 									+ (totdirsize + ctr) + " >= " + quota);
 							write.flush();
 
 							s.close();
-							
+
 							logsem.acquireUninterruptibly();
-							log.addXfrMsg(csock, "Quota exceeded for " + f.getAbsolutePath() + ": " + totdirsize + " >= " + quota, Lvl.NORMAL);
+							log.addXfrMsg(csock, "Quota exceeded for "
+									+ f.getAbsolutePath() + ": " + totdirsize
+									+ " >= " + quota, Lvl.NORMAL);
 							logsem.release();
-							
+
 							return;
 						} else {
 							totdirsize += ctr;
@@ -1052,41 +1054,39 @@ public final class ClientConnection implements Runnable {
 		String[] cmd = readLine.split(" ");
 		ArrayList<String> ret;
 
-		if (cmd.length == 1) {
-			write.print("150 Listing '.'\r\n");
-			write.flush();
-
-			ret = makeCrappyLs(".");
-
-		} else if (cmd.length == 2) {
-			write.print("150 Listing '" + cmd[1] + "'\r\n");
-			write.flush();
-
-			ret = makeCrappyLs(cmd[1]);
-
-		} else {
-
-			String t = null;
-			for (String cc : cmd) {
-				if (!cc.equalsIgnoreCase("LIST") && !cc.startsWith("-")) {
-					t = cc;
-					break;
-				}
+		/*
+		 * if (cmd.length == 1) { write.print("150 Listing '.'\r\n");
+		 * write.flush();
+		 * 
+		 * ret = makeCrappyLs(".");
+		 * 
+		 * } else if (cmd.length == 2) { write.print("150 Listing '" + cmd[1] +
+		 * "'\r\n"); write.flush();
+		 * 
+		 * ret = makeCrappyLs(cmd[1]);
+		 * 
+		 * } else {
+		 */
+		String t = null;
+		for (String cc : cmd) {
+			if (!cc.equalsIgnoreCase("LIST") && !cc.startsWith("-")) {
+				t = cc;
+				break;
 			}
-
-			if (t == null) {
-				ret = makeCrappyLs(".");
-				write.print("150 Listing '.'; options not supported\r\n");
-				write.flush();
-			} else {
-				write.print("150 Listing '" + t
-						+ "'; options not supported'\r\n");
-				write.flush();
-
-				ret = makeCrappyLs(t);
-			}
-
 		}
+
+		if (t == null) {
+			ret = makeCrappyLs(".");
+			write.print("150 Listing '.'; options not supported\r\n");
+			write.flush();
+		} else {
+			write.print("150 Listing '" + t + "'; options not supported'\r\n");
+			write.flush();
+
+			ret = makeCrappyLs(t);
+		}
+
+		// }
 
 		if (ret != null) {
 			try {
